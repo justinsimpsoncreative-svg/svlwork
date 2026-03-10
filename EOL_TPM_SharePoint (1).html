@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EOL Tester TPM Audit</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #181c27;
+    --surface2: #1e2333;
+    --border: #2a3045;
+    --border-active: #3d7fff;
+    --text: #e2e8f0;
+    --text-muted: #6b7a99;
+    --text-dim: #3d4a66;
+    --accent: #3d7fff;
+    --accent-glow: rgba(61,127,255,0.15);
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.12);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.12);
+    --yellow: #f59e0b;
+    --yellow-dim: rgba(245,158,11,0.12);
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  .topbar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 12px 24px; display: flex; align-items: center;
+    justify-content: space-between; position: sticky; top: 0; z-index: 100;
+  }
+  .topbar-brand { font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.15em; color: var(--text-muted); text-transform: uppercase; }
+  .topbar-brand span { color: var(--accent); }
+  .topbar-meta { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+
+  .wrapper { max-width: 720px; margin: 0 auto; padding: 36px 20px 100px; }
+
+  .progress-wrap { height: 2px; background: var(--border); border-radius: 2px; margin-bottom: 28px; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 5%; transition: width 0.4s ease; }
+
+  .form-title { margin-bottom: 28px; }
+  .form-title h1 { font-family: var(--mono); font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .form-title p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+  .doc-meta { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .doc-meta span { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+  .doc-meta span b { color: var(--text-muted); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px; overflow: hidden; }
+  .card.active { border-color: var(--border-active); }
+  .card-header { padding: 14px 20px; background: var(--surface2); display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+  .card-num { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--accent); background: var(--accent-glow); border: 1px solid rgba(61,127,255,0.3); border-radius: 3px; padding: 2px 7px; }
+  .card-title { font-family: var(--mono); font-size: 12px; font-weight: 600; flex: 1; }
+  .badge { font-family: var(--mono); font-size: 9px; padding: 2px 7px; border-radius: 3px; border: 1px solid; letter-spacing: 0.06em; }
+  .badge-all { color: var(--green); border-color: rgba(34,197,94,0.3); background: var(--green-dim); }
+  .badge-su { color: var(--accent); border-color: rgba(61,127,255,0.3); background: var(--accent-glow); }
+  .badge-wk { color: var(--yellow); border-color: rgba(245,158,11,0.3); background: var(--yellow-dim); }
+  .badge-mo { color: var(--green); border-color: rgba(34,197,94,0.3); background: var(--green-dim); }
+  .card-body { padding: 20px; display: none; }
+  .card-body.open { display: block; }
+
+  .q { margin-bottom: 20px; }
+  .q:last-child { margin-bottom: 0; }
+  .q-label { font-size: 13px; font-weight: 500; margin-bottom: 3px; display: flex; gap: 5px; }
+  .q-label .req { color: var(--red); font-size: 11px; }
+  .q-hint { font-size: 11px; color: var(--text-muted); font-style: italic; margin-bottom: 8px; line-height: 1.5; }
+
+  input[type=text], input[type=date], input[type=time], input[type=number], select, textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-family: var(--sans); font-size: 13px; padding: 9px 12px;
+    outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  textarea { resize: vertical; min-height: 72px; }
+  select option { background: var(--surface2); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+  .toggle-group { display: flex; gap: 8px; }
+  .tog-opt { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 10px 12px; cursor: pointer; font-size: 13px; user-select: none;
+    transition: all 0.15s; text-align: center; }
+  .tog-opt:hover { border-color: var(--accent); background: var(--accent-glow); }
+  .tog-opt input { display: none; }
+  .tog-opt.pass { border-color: var(--green); background: var(--green-dim); color: var(--green); }
+  .tog-opt.fail { border-color: var(--red); background: var(--red-dim); color: var(--red); }
+  .tog-opt.warn { border-color: var(--yellow); background: var(--yellow-dim); color: var(--yellow); }
+
+  .branch-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+  .branch-card { border: 1px solid var(--border); border-radius: 5px; padding: 16px 12px;
+    cursor: pointer; text-align: center; background: var(--bg); transition: all 0.15s; }
+  .branch-card:hover { border-color: var(--accent); background: var(--accent-glow); }
+  .branch-card.selected { border-color: var(--accent); background: var(--accent-glow); border-width: 2px; }
+  .branch-card .icon { font-size: 22px; margin-bottom: 8px; }
+  .branch-card .bc-title { font-family: var(--mono); font-size: 11px; font-weight: 600; display: block; }
+  .branch-card .bc-sub { font-size: 10px; color: var(--text-muted); margin-top: 3px; display: block; }
+  .branch-card.selected .bc-title { color: var(--accent); }
+
+  .divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+  .section-label { font-family: var(--mono); font-size: 9px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.1em; margin-bottom: 12px; }
+
+  .alert { border-radius: 4px; padding: 12px 16px; font-size: 12px; line-height: 1.6; margin-top: 10px; display: none; }
+  .alert.visible { display: block; }
+  .alert-hold { background: var(--red-dim); border: 1px solid rgba(239,68,68,0.35); color: var(--red); font-weight: 600; }
+  .alert-info { background: var(--accent-glow); border: 1px solid rgba(61,127,255,0.3); color: var(--accent); }
+
+  .slider-wrap { display: flex; align-items: center; gap: 12px; }
+  .slider-wrap input[type=range] { flex: 1; appearance: none; height: 4px; background: var(--border); border-radius: 2px; outline: none; border: none; padding: 0; }
+  .slider-wrap input[type=range]::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+  .slider-val { font-family: var(--mono); font-size: 18px; font-weight: 600; color: var(--accent); min-width: 24px; text-align: center; }
+
+  .run-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .run-item label { font-family: var(--mono); font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 4px; }
+
+  .submit-btn { width: 100%; padding: 14px; background: var(--accent); color: #fff;
+    border: none; border-radius: 4px; font-family: var(--mono); font-size: 12px;
+    font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;
+    transition: opacity 0.15s; margin-top: 20px; }
+  .submit-btn:hover:not(:disabled) { opacity: 0.85; }
+  .submit-btn:disabled { background: var(--border); color: var(--text-dim); cursor: not-allowed; }
+  .submit-note { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 8px; }
+
+  .success-screen { display: none; text-align: center; padding: 60px 20px; }
+  .success-screen.visible { display: block; }
+  .success-screen .icon { font-size: 48px; margin-bottom: 16px; }
+  .success-screen h2 { font-family: var(--mono); font-size: 18px; color: var(--green); margin-bottom: 8px; }
+  .success-screen p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+  .success-ref { font-family: var(--mono); font-size: 11px; color: var(--accent); margin-top: 14px; }
+  .success-hold { background: var(--red-dim); border: 1px solid rgba(239,68,68,0.3); border-radius: 4px; padding: 12px 16px; margin-top: 16px; font-size: 12px; color: var(--red); font-weight: 600; display: none; }
+  .new-audit-btn { margin-top: 24px; padding: 12px 28px; background: var(--accent); color: #fff; border: none; border-radius: 4px; font-family: var(--mono); font-size: 12px; font-weight: 600; cursor: pointer; letter-spacing: 0.08em; }
+
+  .status-bar { font-family: var(--mono); font-size: 11px; padding: 10px 16px; border-radius: 4px; margin-top: 12px; display: none; }
+  .status-bar.saving { background: var(--accent-glow); border: 1px solid rgba(61,127,255,0.3); color: var(--accent); display: block; }
+  .status-bar.error { background: var(--red-dim); border: 1px solid rgba(239,68,68,0.3); color: var(--red); display: block; }
+
+  @media (max-width: 580px) {
+    .grid-2, .grid-3, .branch-grid, .run-grid { grid-template-columns: 1fr; }
+    .toggle-group { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand">SVL Quality — <span>EOL Tester TPM</span></div>
+  <div class="topbar-meta">F-QC-EOL-001  |  Rev 1.0</div>
+</div>
+
+<div class="wrapper">
+  <div class="progress-wrap"><div class="progress-fill" id="prog"></div></div>
+
+  <div id="formArea">
+    <div class="form-title">
+      <h1>End-of-Line Tester Audit</h1>
+      <p>Complete all required fields. Anomalies must include an NCR reference before submission. Records are saved directly to the QMS SharePoint list.</p>
+      <div class="doc-meta">
+        <span><b>DOC:</b> F-QC-EOL-001</span>
+        <span><b>REV:</b> 1.0</span>
+        <span><b>LIST:</b> EOLTesterTPMAudit</span>
+        <span><b>ISO:</b> 9001:2015 §7.1.5</span>
+      </div>
+    </div>
+
+    <!-- ── CARD 01: HEADER ── -->
+    <div class="card active" id="card-header">
+      <div class="card-header">
+        <span class="card-num">01</span>
+        <span class="card-title">Record Header</span>
+        <span class="badge badge-all">ALL AUDITS</span>
+      </div>
+      <div class="card-body open">
+        <div class="grid-2">
+          <div class="q">
+            <div class="q-label">Date <span class="req">*</span></div>
+            <input type="date" id="hdr-date">
+          </div>
+          <div class="q">
+            <div class="q-label">Shift <span class="req">*</span></div>
+            <select id="hdr-shift">
+              <option value="">— Select —</option>
+              <option>Day</option>
+              <option>Afternoon</option>
+              <option>Night</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid-2" style="margin-top:14px">
+          <div class="q">
+            <div class="q-label">Operator Name <span class="req">*</span></div>
+            <input type="text" id="hdr-operator" placeholder="First Last">
+          </div>
+          <div class="q">
+            <div class="q-label">Tester Asset ID <span class="req">*</span></div>
+            <input type="text" id="hdr-asset" placeholder="e.g. EOL-01">
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="q">
+          <div class="q-label">Audit Type <span class="req">*</span></div>
+          <div class="q-hint">Select the type of check being performed. The form will load the relevant questions.</div>
+          <div class="branch-grid">
+            <div class="branch-card" id="bc-Startup" onclick="selectBranch('Startup')">
+              <div class="icon">🔁</div>
+              <span class="bc-title">STARTUP</span>
+              <span class="bc-sub">Every shift / pre-use</span>
+            </div>
+            <div class="branch-card" id="bc-Weekly" onclick="selectBranch('Weekly')">
+              <div class="icon">📅</div>
+              <span class="bc-title">WEEKLY</span>
+              <span class="bc-sub">Once per week</span>
+            </div>
+            <div class="branch-card" id="bc-Monthly" onclick="selectBranch('Monthly')">
+              <div class="icon">📊</div>
+              <span class="bc-title">MONTHLY</span>
+              <span class="bc-sub">MSR / gauge verification</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARD 02A: STARTUP ── -->
+    <div class="card" id="card-Startup" style="display:none">
+      <div class="card-header">
+        <span class="card-num">02A</span>
+        <span class="card-title">Startup Check — Pre-Use Verification</span>
+        <span class="badge badge-su">STARTUP</span>
+      </div>
+      <div class="card-body open">
+
+        <div class="q">
+          <div class="q-label">Software loaded and program running? <span class="req">*</span></div>
+          <div class="toggle-group">
+            <label class="tog-opt" onclick="tog(this,'sw-load','Pass')"><input type="radio" name="sw-load" value="Pass">✓ Yes — Loaded</label>
+            <label class="tog-opt" onclick="tog(this,'sw-load','Fail')"><input type="radio" name="sw-load" value="Fail">✗ No — Issue Found</label>
+          </div>
+        </div>
+
+        <div class="q">
+          <div class="q-label">Interior visual — nothing loose, camera unobstructed? <span class="req">*</span></div>
+          <div class="toggle-group">
+            <label class="tog-opt" onclick="tog(this,'interior','Pass')"><input type="radio" name="interior" value="Pass">✓ Acceptable</label>
+            <label class="tog-opt" onclick="tog(this,'interior','Fail')"><input type="radio" name="interior" value="Fail">✗ Issue Found</label>
+          </div>
+        </div>
+
+        <div class="q">
+          <div class="q-label">Fixture — seated, locked, no damage? <span class="req">*</span></div>
+          <div class="toggle-group">
+            <label class="tog-opt" onclick="tog(this,'fixture','Pass')"><input type="radio" name="fixture" value="Pass">✓ Acceptable</label>
+            <label class="tog-opt" onclick="tog(this,'fixture','Fail')"><input type="radio" name="fixture" value="Fail">✗ Issue Found</label>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-label">MASTER PART VERIFICATION — ISO 9001:2015 §7.1.5</div>
+
+        <div class="grid-2">
+          <div class="q">
+            <div class="q-label">Known-Good (Pass Master) result <span class="req">*</span></div>
+            <div class="q-hint">Tester must PASS this part.</div>
+            <div class="toggle-group">
+              <label class="tog-opt" onclick="tog(this,'pass-master','Pass'); checkHold()"><input type="radio" name="pass-master" value="Pass">✓ PASS</label>
+              <label class="tog-opt" onclick="tog(this,'pass-master','Fail'); checkHold()"><input type="radio" name="pass-master" value="Fail">✗ FAIL ⚠</label>
+            </div>
+          </div>
+          <div class="q">
+            <div class="q-label">Pass Master — Reading <span class="req">*</span></div>
+            <div class="q-hint">Enter value from tester display.</div>
+            <input type="text" id="pass-master-reading" placeholder="e.g. 4823 lux">
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top:14px">
+          <div class="q">
+            <div class="q-label">Known-Bad (Fail Master) result <span class="req">*</span></div>
+            <div class="q-hint">Tester must REJECT this part.</div>
+            <div class="toggle-group">
+              <label class="tog-opt" onclick="tog(this,'fail-master','Pass'); checkHold()"><input type="radio" name="fail-master" value="Pass">✓ Correctly FAILED</label>
+              <label class="tog-opt" onclick="tog(this,'fail-master','Fail'); checkHold()"><input type="radio" name="fail-master" value="Fail">✗ Incorrectly PASSED ⚠</label>
+            </div>
+          </div>
+          <div class="q">
+            <div class="q-label">Fail Master — Reading <span class="req">*</span></div>
+            <div class="q-hint">Enter value from tester display.</div>
+            <input type="text" id="fail-master-reading" placeholder="e.g. 1204 lux">
+          </div>
+        </div>
+
+        <div class="alert alert-hold" id="hold-alert">
+          ⚠ PRODUCTION HOLD — Master part verification failed. Do not run production. Tag tester as OUT OF SERVICE and notify Quality immediately. Open an NCR before proceeding.
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="q">
+          <div class="q-label">Any anomalies observed during startup? <span class="req">*</span></div>
+          <div class="toggle-group">
+            <label class="tog-opt" onclick="tog(this,'anomaly-su','No'); showAnomaly('su',false)"><input type="radio" name="anomaly-su" value="No">No — All Clear</label>
+            <label class="tog-opt" onclick="tog(this,'anomaly-su','Yes'); showAnomaly('su',true)"><input type="radio" name="anomaly-su" value="Yes">Yes — Anomaly Found</label>
+          </div>
+        </div>
+        <div id="anomaly-su-fields" style="display:none; margin-top:12px">
+          <div class="q">
+            <div class="q-label">Anomaly Description <span class="req">*</span></div>
+            <textarea id="su-anomaly-desc" placeholder="Describe the issue observed..."></textarea>
+          </div>
+          <div class="q" style="margin-top:12px">
+            <div class="q-label">NCR Reference # <span class="req">*</span></div>
+            <div class="q-hint">Required before submission. Open an NCR if one does not exist.</div>
+            <input type="text" id="su-ncr-ref" placeholder="e.g. NCR-2026-0041">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARD 02B: WEEKLY ── -->
+    <div class="card" id="card-Weekly" style="display:none">
+      <div class="card-header">
+        <span class="card-num">02B</span>
+        <span class="card-title">Weekly Maintenance Check</span>
+        <span class="badge badge-wk">WEEKLY</span>
+      </div>
+      <div class="card-body open">
+
+        <div class="q">
+          <div class="q-label">Interior blown out with compressed air? <span class="req">*</span></div>
+          <div class="toggle-group">
+            <label class="tog-opt" onclick="tog(this,'blowout','Yes')"><input type="radio" name="blowout" value="Yes">✓ Completed</label>
+            <label class="tog-opt" onclick="tog(this,'blowout','No')"><input type="radio" name="blowout" value="No">✗ Not Completed</label>
+          </div>
+        </div>
+
+        <div class="q">
+          <div class="q-label">Cable inspection — no cuts, kinks, or loose connectors? <span class="req">*</span></div>
+          <div class="toggle-group">
+            <label class="tog-opt" onclick="tog(this,'cables','Pass')"><input type="radio" name="cables" value="Pass">✓ Acceptable</label>
+            <label class="tog-opt" onclick="tog(this,'cables','Fail')"><input type="radio" name="cables" value="Fail">✗ Issue Found</label>
+          </div>
+        </div>
+
+        <div class="q">
+          <div class="q-label">Strain relief and cable routing acceptable? <span class="req">*</span></div>
+          <div class="toggle-group">
+            <label class="tog-opt" onclick="tog(this,'strain','Pass')"><input type="radio" name="strain" value="Pass">✓ Acceptable</label>
+            <label class="tog-opt" onclick="tog(this,'strain','Fail')"><input type="radio" name="strain" value="Fail">✗ Issue Found</label>
+          </div>
+        </div>
+
+        <div class="q">
+          <div class="q-label">L6000 / Fixture condition rating <span class="req">*</span></div>
+          <div class="q-hint">1 = New/Excellent &nbsp;·&nbsp; 3 = Normal wear &nbsp;·&nbsp; 5 = Needs immediate attention</div>
+          <div class="slider-wrap">
+            <input type="range" id="l6000-wk" min="1" max="5" step="1" value="3" oninput="updateSlider('l6000-wk','l6000-wk-val')">
+            <span class="slider-val" id="l6000-wk-val">3</span>
+          </div>
+        </div>
+
+        <div class="q">
+          <div class="q-label">Open corrective actions from prior weekly audits? <span class="req">*</span></div>
+          <div class="toggle-group">
+            <label class="tog-opt" onclick="tog(this,'open-actions','No'); showField('open-action-ref',false)"><input type="radio" name="open-actions" value="No">No — None Open</label>
+            <label class="tog-opt" onclick="tog(this,'open-actions','Yes'); showField('open-action-ref',true)"><input type="radio" name="open-actions" value="Yes">Yes — Still Open</label>
+          </div>
+        </div>
+        <div id="open-action-ref" style="display:none; margin-top:10px">
+          <input type="text" id="wk-open-action-ref" placeholder="Reference # and current status (e.g. NCR-2026-0038 — parts on order)">
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="q">
+          <div class="q-label">Any new anomalies observed? <span class="req">*</span></div>
+          <div class="toggle-group">
+            <label class="tog-opt" onclick="tog(this,'anomaly-wk','No'); showAnomaly('wk',false)"><input type="radio" name="anomaly-wk" value="No">No — All Clear</label>
+            <label class="tog-opt" onclick="tog(this,'anomaly-wk','Yes'); showAnomaly('wk',true)"><input type="radio" name="anomaly-wk" value="Yes">Yes — Anomaly Found</label>
+          </div>
+        </div>
+        <div id="anomaly-wk-fields" style="display:none; margin-top:12px">
+          <div class="q">
+            <div class="q-label">Anomaly Description <span class="req">*</span></div>
+            <textarea id="wk-anomaly-desc" placeholder="Describe the issue..."></textarea>
+          </div>
+          <div class="q" style="margin-top:12px">
+            <div class="q-label">NCR Reference # <span class="req">*</span></div>
+            <input type="text" id="wk-ncr-ref" placeholder="e.g. NCR-2026-0042">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARD 02C: MONTHLY ── -->
+    <div class="card" id="card-Monthly" style="display:none">
+      <div class="card-header">
+        <span class="card-num">02C</span>
+        <span class="card-title">Monthly — Measurement System Review</span>
+        <span class="badge badge-mo">MONTHLY</span>
+      </div>
+      <div class="card-body open">
+
+        <div class="section-label">PASS MASTER — 10 CONSECUTIVE READINGS</div>
+        <div class="run-grid">
+          <div class="run-item"><label>Run 1</label><input type="text" id="run1" placeholder="—"></div>
+          <div class="run-item"><label>Run 6</label><input type="text" id="run6" placeholder="—"></div>
+          <div class="run-item"><label>Run 2</label><input type="text" id="run2" placeholder="—"></div>
+          <div class="run-item"><label>Run 7</label><input type="text" id="run7" placeholder="—"></div>
+          <div class="run-item"><label>Run 3</label><input type="text" id="run3" placeholder="—"></div>
+          <div class="run-item"><label>Run 8</label><input type="text" id="run8" placeholder="—"></div>
+          <div class="run-item"><label>Run 4</label><input type="text" id="run4" placeholder="—"></div>
+          <div class="run-item"><label>Run 9</label><input type="text" id="run9" placeholder="—"></div>
+          <div class="run-item"><label>Run 5</label><input type="text" id="run5" placeholder="—"></div>
+          <div class="run-item"><label>Run 10</label><input type="text" id="run10" placeholder="—"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="grid-2">
+          <div class="q">
+            <div class="q-label">Results within tolerance vs. last month? <span class="req">*</span></div>
+            <div class="toggle-group">
+              <label class="tog-opt" onclick="tog(this,'tolerance','Yes'); showDrift(false)"><input type="radio" name="tolerance" value="Yes">✓ Within Tolerance</label>
+              <label class="tog-opt" onclick="tog(this,'tolerance','No'); showDrift(true)"><input type="radio" name="tolerance" value="No">✗ Drift Detected</label>
+            </div>
+          </div>
+          <div class="q">
+            <div class="q-label">Screenshot / data stored in SharePoint? <span class="req">*</span></div>
+            <div class="toggle-group">
+              <label class="tog-opt" onclick="tog(this,'screenshot','Yes')"><input type="radio" name="screenshot" value="Yes">✓ Yes</label>
+              <label class="tog-opt" onclick="tog(this,'screenshot','No')"><input type="radio" name="screenshot" value="No">✗ Not Yet</label>
+            </div>
+          </div>
+        </div>
+
+        <div id="drift-fields" style="display:none; margin-top:14px">
+          <div class="q">
+            <div class="q-label">Drift description <span class="req">*</span></div>
+            <textarea id="mo-drift-desc" placeholder="Note direction and magnitude of drift vs. prior month baseline..."></textarea>
+          </div>
+          <div class="q" style="margin-top:12px">
+            <div class="q-label">CAPA Reference # <span class="req">*</span></div>
+            <input type="text" id="mo-capa-ref" placeholder="e.g. CAPA-2026-0011">
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="q">
+          <div class="q-label">L6000 / Fixture monthly condition rating <span class="req">*</span></div>
+          <div class="q-hint">1 = New/Excellent &nbsp;·&nbsp; 5 = Needs immediate attention</div>
+          <div class="slider-wrap">
+            <input type="range" id="l6000-mo" min="1" max="5" step="1" value="3" oninput="updateSlider('l6000-mo','l6000-mo-val')">
+            <span class="slider-val" id="l6000-mo-val">3</span>
+          </div>
+        </div>
+
+        <div class="q">
+          <div class="q-label">SharePoint file path / folder for this month's data <span class="req">*</span></div>
+          <input type="text" id="mo-file-location" placeholder="e.g. QMS > EOL Tester > Monthly MSR > 2026-02">
+        </div>
+
+        <div class="q">
+          <div class="q-label">Supervisor / QE Reviewer Name <span class="req">*</span></div>
+          <input type="text" id="mo-reviewer" placeholder="Reviewing supervisor name">
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SUBMIT ── -->
+    <div id="submit-area" style="display:none; margin-top:8px">
+      <div class="q" style="font-size:12px; color:var(--text-muted); line-height:1.6; padding:14px 16px; background:var(--surface); border:1px solid var(--border); border-radius:4px;">
+        By submitting you confirm all entries are accurate and any anomalies have been referenced. Records are written directly to the QMS SharePoint list and retained per the document retention schedule.
+      </div>
+      <div id="status-msg" class="status-bar"></div>
+      <button class="submit-btn" id="submitBtn" onclick="submitForm()">Submit Audit Record</button>
+      <div class="submit-note">Saves to: EOLTesterTPMAudit · smartvisionlights3.sharepoint.com/sites/Quality</div>
+    </div>
+  </div>
+
+  <!-- ── SUCCESS SCREEN ── -->
+  <div class="success-screen" id="successScreen">
+    <div class="icon">✅</div>
+    <h2>Audit Record Submitted</h2>
+    <p>Your TPM record has been saved to the QMS SharePoint list.<br>If an anomaly was reported, confirm your NCR is open and assigned.</p>
+    <div class="success-ref" id="successRef"></div>
+    <div class="success-hold" id="holdReminder">
+      ⚠ REMINDER: Tester is tagged OUT OF SERVICE. Do not release for production until Quality clears the hold.
+    </div>
+    <button class="new-audit-btn" onclick="resetForm()">Start New Audit</button>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// CONFIG — update this if your site URL ever changes
+// ─────────────────────────────────────────────────────────────
+const SITE_URL   = "https://smartvisionlights3.sharepoint.com/sites/Quality";
+const LIST_NAME  = "EOLTesterTPMAudit";
+
+// ─────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────
+let currentBranch = null;
+let showHold = false;
+let digestToken = null;
+
+// ─────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const now = new Date();
+  document.getElementById('hdr-date').value = now.toISOString().split('T')[0];
+  fetchDigest();
+});
+
+// Fetch SharePoint Request Digest token on load
+// This uses the user's existing SharePoint session — no login needed
+// when the form is embedded in a SharePoint page
+async function fetchDigest() {
+  try {
+    const res = await fetch(`${SITE_URL}/_api/contextinfo`, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json;odata=verbose' },
+      credentials: 'include'
+    });
+    const data = await res.json();
+    digestToken = data.d.GetContextWebInformation.FormDigestValue;
+    console.log('SharePoint session established.');
+  } catch (e) {
+    console.warn('Could not fetch digest — form may not be embedded in SharePoint yet.', e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// UI HELPERS
+// ─────────────────────────────────────────────────────────────
+function selectBranch(branch) {
+  currentBranch = branch;
+  ['Startup','Weekly','Monthly'].forEach(b => {
+    document.getElementById('bc-' + b).classList.remove('selected');
+    document.getElementById('card-' + b).style.display = 'none';
+  });
+  document.getElementById('bc-' + branch).classList.add('selected');
+  document.getElementById('card-' + branch).style.display = 'block';
+  document.getElementById('submit-area').style.display = 'block';
+  updateProgress(30);
+  setTimeout(() => document.getElementById('card-' + branch).scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
+
+function tog(el, name, cls) {
+  document.querySelectorAll(`[name="${name}"]`).forEach(r => {
+    r.closest('.tog-opt').classList.remove('pass','fail','warn');
+  });
+  if (cls === 'Pass' || cls === 'Yes' || cls === 'Completed') el.classList.add('pass');
+  else if (cls === 'Fail' || cls === 'No') el.classList.add('fail');
+  else el.classList.add('warn');
+  updateProgress();
+}
+
+function updateSlider(id, valId) {
+  const v = document.getElementById(id).value;
+  const el = document.getElementById(valId);
+  el.textContent = v;
+  el.style.color = v >= 4 ? 'var(--red)' : 'var(--accent)';
+  document.getElementById(id).style.background =
+    v >= 4 ? 'linear-gradient(to right, var(--red) 0%, var(--red) ' + ((v-1)/4*100) + '%, var(--border) ' + ((v-1)/4*100) + '%)' :
+             'linear-gradient(to right, var(--accent) 0%, var(--accent) ' + ((v-1)/4*100) + '%, var(--border) ' + ((v-1)/4*100) + '%)';
+}
+
+function showAnomaly(branch, show) {
+  document.getElementById('anomaly-' + branch + '-fields').style.display = show ? 'block' : 'none';
+  tog; updateProgress();
+}
+
+function showField(id, show) {
+  document.getElementById(id).style.display = show ? 'block' : 'none';
+}
+
+function showDrift(show) {
+  document.getElementById('drift-fields').style.display = show ? 'block' : 'none';
+}
+
+function checkHold() {
+  const pmFail = document.querySelector('[name="pass-master"].fail');
+  const fmFail = document.querySelector('[name="fail-master"].fail');
+  showHold = !!(pmFail || fmFail);
+  document.getElementById('hold-alert').classList.toggle('visible', showHold);
+  updateProgress();
+}
+
+function getRadio(name) {
+  const el = document.querySelector(`[name="${name}"]:checked`);
+  return el ? el.value : '';
+}
+
+function updateProgress(val) {
+  if (val) { document.getElementById('prog').style.width = val + '%'; return; }
+  const filled = document.querySelectorAll('.tog-opt.pass, .tog-opt.fail').length;
+  const pct = Math.min(10 + filled * 6, 90);
+  document.getElementById('prog').style.width = pct + '%';
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status-msg');
+  el.textContent = msg;
+  el.className = 'status-bar ' + type;
+}
+
+// ─────────────────────────────────────────────────────────────
+// GENERATE RECORD ID
+// ─────────────────────────────────────────────────────────────
+function genRecordID() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate());
+  const rand = Math.floor(Math.random() * 9000) + 1000;
+  return `EOL-${dateStr}-${rand}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// BUILD SHAREPOINT PAYLOAD
+// ─────────────────────────────────────────────────────────────
+function buildPayload(recordID) {
+  const base = {
+    '__metadata': { 'type': `SP.Data.EOLTesterTPMAuditListItem` },
+    'Title':              recordID,
+    'RecordID':           recordID,
+    'AuditType':          currentBranch,
+    'AuditDate':          document.getElementById('hdr-date').value,
+    'AuditTime':          document.getElementById('hdr-shift').value,
+    'OperatorName':       document.getElementById('hdr-operator').value,
+    'TesterAssetID':      document.getElementById('hdr-asset').value,
+    'SubmittedTimestamp': new Date().toISOString()
+  };
+
+  if (currentBranch === 'Startup') {
+    Object.assign(base, {
+      'SW_LoadOK':            getRadio('sw-load'),
+      'Interior_VisualOK':    getRadio('interior'),
+      'Fixture_ConditionOK':  getRadio('fixture'),
+      'PassMaster_Result':    getRadio('pass-master'),
+      'PassMaster_Reading':   document.getElementById('pass-master-reading').value,
+      'FailMaster_Result':    getRadio('fail-master') === 'Pass' ? 'Correctly Failed' : 'Incorrectly Passed',
+      'FailMaster_Reading':   document.getElementById('fail-master-reading').value,
+      'Startup_AnomalyFound': getRadio('anomaly-su'),
+      'Startup_AnomalyDesc':  document.getElementById('su-anomaly-desc').value,
+      'Startup_NCRRef':       document.getElementById('su-ncr-ref').value
+    });
+  }
+
+  if (currentBranch === 'Weekly') {
+    Object.assign(base, {
+      'Wk_BlowoutDone':    getRadio('blowout'),
+      'Wk_CableInspOK':    getRadio('cables'),
+      'Wk_StrainReliefOK': getRadio('strain'),
+      'Wk_L6000Rating':    parseInt(document.getElementById('l6000-wk').value),
+      'Wk_OpenActions':    getRadio('open-actions'),
+      'Wk_OpenActionRef':  document.getElementById('wk-open-action-ref').value,
+      'Wk_AnomalyFound':   getRadio('anomaly-wk'),
+      'Wk_AnomalyDesc':    document.getElementById('wk-anomaly-desc').value,
+      'Wk_NCRRef':         document.getElementById('wk-ncr-ref').value
+    });
+  }
+
+  if (currentBranch === 'Monthly') {
+    Object.assign(base, {
+      'Mo_Run1':           document.getElementById('run1').value,
+      'Mo_Run2':           document.getElementById('run2').value,
+      'Mo_Run3':           document.getElementById('run3').value,
+      'Mo_Run4':           document.getElementById('run4').value,
+      'Mo_Run5':           document.getElementById('run5').value,
+      'Mo_Run6':           document.getElementById('run6').value,
+      'Mo_Run7':           document.getElementById('run7').value,
+      'Mo_Run8':           document.getElementById('run8').value,
+      'Mo_Run9':           document.getElementById('run9').value,
+      'Mo_Run10':          document.getElementById('run10').value,
+      'Mo_ToleranceOK':    getRadio('tolerance'),
+      'Mo_ScreenshotStored': getRadio('screenshot'),
+      'Mo_DriftDesc':      document.getElementById('mo-drift-desc').value,
+      'Mo_CAPARef':        document.getElementById('mo-capa-ref').value,
+      'Mo_L6000Rating':    parseInt(document.getElementById('l6000-mo').value),
+      'Mo_DataFileLocation': document.getElementById('mo-file-location').value,
+      'Mo_ReviewerName':   document.getElementById('mo-reviewer').value
+    });
+  }
+
+  return base;
+}
+
+// ─────────────────────────────────────────────────────────────
+// SUBMIT — writes to SharePoint REST API
+// ─────────────────────────────────────────────────────────────
+async function submitForm() {
+  const btn = document.getElementById('submitBtn');
+
+  // Basic validation
+  if (!document.getElementById('hdr-operator').value ||
+      !document.getElementById('hdr-asset').value ||
+      !document.getElementById('hdr-shift').value ||
+      !currentBranch) {
+    setStatus('Please complete all required header fields before submitting.', 'error');
+    return;
+  }
+
+  // Anomaly gate — NCR ref required
+  if (currentBranch === 'Startup' && getRadio('anomaly-su') === 'Yes') {
+    if (!document.getElementById('su-ncr-ref').value || !document.getElementById('su-anomaly-desc').value) {
+      setStatus('Anomaly reported — NCR reference and description are required before submission.', 'error');
+      return;
+    }
+  }
+  if (currentBranch === 'Weekly' && getRadio('anomaly-wk') === 'Yes') {
+    if (!document.getElementById('wk-ncr-ref').value || !document.getElementById('wk-anomaly-desc').value) {
+      setStatus('Anomaly reported — NCR reference and description are required before submission.', 'error');
+      return;
+    }
+  }
+
+  // Refresh digest if needed
+  if (!digestToken) {
+    setStatus('Reconnecting to SharePoint...', 'saving');
+    await fetchDigest();
+    if (!digestToken) {
+      setStatus('Could not connect to SharePoint. Ensure this form is embedded in a SharePoint page and you are signed in.', 'error');
+      return;
+    }
+  }
+
+  const recordID = genRecordID();
+  const payload  = buildPayload(recordID);
+
+  btn.disabled = true;
+  setStatus('Saving record to SharePoint...', 'saving');
+
+  try {
+    const res = await fetch(
+      `${SITE_URL}/_api/web/lists/getbytitle('${LIST_NAME}')/items`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Accept':       'application/json;odata=verbose',
+          'Content-Type': 'application/json;odata=verbose',
+          'X-RequestDigest': digestToken
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const errMsg = errData?.error?.message?.value || `HTTP ${res.status}`;
+      throw new Error(errMsg);
+    }
+
+    // Success
+    document.getElementById('prog').style.width = '100%';
+    document.getElementById('formArea').style.display = 'none';
+    document.getElementById('successScreen').classList.add('visible');
+    document.getElementById('successRef').textContent =
+      `Record ID: ${recordID}  ·  ${new Date().toLocaleString()}`;
+    if (showHold) {
+      document.getElementById('holdReminder').style.display = 'block';
+    }
+
+  } catch (err) {
+    btn.disabled = false;
+    let userMsg = err.message;
+    // Common error guidance
+    if (err.message.includes('401') || err.message.includes('403')) {
+      userMsg = 'Permission denied. Ensure you have Contribute access to the EOLTesterTPMAudit list.';
+    } else if (err.message.includes('404')) {
+      userMsg = 'List not found. Verify the list is named exactly "EOLTesterTPMAudit" on this SharePoint site.';
+    } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+      userMsg = 'Network error. This form must be embedded in a SharePoint page — it cannot run as a standalone file.';
+    }
+    setStatus('Error: ' + userMsg, 'error');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// RESET
+// ─────────────────────────────────────────────────────────────
+function resetForm() {
+  location.reload();
+}
+</script>
+</body>
+</html>
